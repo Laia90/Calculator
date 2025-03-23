@@ -36,6 +36,7 @@ div.screen {
 
 .calculator,
 .numpad,
+.operators,
 .numbers {
     display: flex;
     flex-direction: column;
@@ -44,7 +45,6 @@ div.screen {
 }
 
 .row,
-.operators,
 .screen {
     display: flex;
     flex-direction: row;
