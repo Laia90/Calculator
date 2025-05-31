@@ -257,8 +257,7 @@ function createOutputString(terms, charNumber = 15, shortTo = 5) {
         case 's':
             return shortenNum(firstNum, secondNum, charNumber, operator.length + 2, shortTo) + ' ' + operator + ' ' + shortenNum(secondNum, firstNum, charNumber, operator.length + 2, shortTo); break;
         default:
-            //return terms.toString();
-            return roundNumber(Number(terms), charNumber).toString(); // to be tested
+            return roundNumber(Number(terms), charNumber).toString();
     }
 }
 
@@ -415,4 +414,4 @@ function modulo(num1, num2) {
     }
     else { return num1 % num2; }
 }
-// TD: display-Groesse fixen
+// TD: display-Groesse fixen - em Einheiten statt vw/vh?
