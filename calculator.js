@@ -6,17 +6,29 @@ let errorMessage = "";
 
 const operators = ['+', '-', '*', '/', '%'];
 const validInputs = ['+', '-', '*', '/', '%', '=', '.', '+/-', 'C', 'AC', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+const validKeys = ['+', '-', '*', '/', '%', '=', '.', 'Backspace', 'Delete', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
 document.addEventListener("DOMContentLoaded", () => {
     const buttons = document.querySelector("div.numpad");
 
     buttons.addEventListener("click", buttonClicked);
+    document.addEventListener("keydown", keyPushed);
 });
 
 function buttonClicked(event) {
     const display = document.querySelector("div.screen span");
     let input = event.target.textContent;
     getDisplay(input, display);
+}
+
+function keyPushed(event) {
+    const display = document.querySelector("div.screen span");
+    let input = event.key;
+
+    if (validKeys.includes(input)) {
+        event.preventDefault();
+        getDisplay(input, display);
+    }
 }
 
 /* Input is invalid if:
@@ -131,21 +143,49 @@ function secondNumStart() {
     return !isNaN(firstNum) && operators.includes(operator) && isNaN(secondNum);
 }
 
-//  Deal with too long integers by displaying them as a multiple of a power of ten
+/* Determine if (keyboard) input is the number's (negative) sign or a normal operator / number.
+ * The Backspace key replaces the C button and the Delete key the AC button.
+ * If the position of the new character allows a sign, the '-' key replaces the +/- button.
+ */
+function parseKey(input) {
+    if (input == '-' && (firstNumStart() || (secondNumStart() && !(operator == 'none')))) { return '+/-'; }
+    else if (input == 'Backspace') { return 'C'; }
+    else if (input == 'Delete') { return 'AC'; }
+    else if (validInputs.includes(input)) { return input; }
+    else { return 'ignore'; }
+}
+
+// Add input to the number in a manner dependent on wether the number is in exponential notation or not.
+function shiftNumber(num, input) {
+    num = num.toString();
+    if (num.includes('e')) {
+        num = Number(num) * 10 + Number(input);
+    }
+    else {
+        num = num + input;
+    }
+    return num;
+}
+
+//  Deal with too long numbers by displaying them as exponential numbers.
 //  max = maximal length allocated for this number
 function roundNumber(num, max) {
-    let out = num;
-    let len = num.toString().length;
+    let decLength = max - 4;
 
-    if (len > max) {
-        let power = len - max + 2; // amount by which to shorten the number
-        power += power.toString().length; // factor in the space used to display the power of ten
-
-        let pre = Math.round(num / (10 ** power));
-        out = pre + 'e+' + power;
+    if (isDecimalNumber(num) && (num.toString().split('.'))[0].length == 1) {
+        //if (isDecimalNumber(num)) {
+        if (num.toString().length > max) {
+            num = Number(num).toFixed(decLength);
+        }
     }
 
-    return out;
+    while (num.toString().length > max) {
+        if (decLength > 20) { return undefined; break; } // too many decimal numbers, do not try to convert
+        num = Number(num).toExponential(decLength);
+        decLength -= 1;
+    }; // if power is a longer number than currently planned for, round again with 1 more character allocated to power
+
+    return num;
 }
 
 // Clear the last character that was entered
@@ -154,33 +194,33 @@ function clearLast(display) {
         secondNum = secondNum.toString().slice(0, -1);
         if (secondNum == '' || secondNum == '-') {
             secondNum = NaN;
-            setDisplay(2, display);
+            setDisplay('o', display);
         }
         else {
             secondNum = Number(secondNum);
-            setDisplay(3, display);
+            setDisplay('s', display);
         }
     }
 
     else if (operators.includes(operator)) {
         operator = 'none';
-        setDisplay(1, display);
+        setDisplay('f', display);
     }
 
     else if (!isNaN(firstNum)) {
         firstNum = firstNum.toString().slice(0, -1);
         if (firstNum == '' || firstNum == '-') {
             firstNum = NaN;
-            setDisplay(0, display);
+            setDisplay('n', display);
         }
         else {
             firstNum = Number(firstNum);
-            setDisplay(1, display);
+            setDisplay('f', display);
         }
     }
 
     else {
-        setDisplay(0, display);
+        setDisplay('n', display);
     }
 }
 
@@ -192,34 +232,40 @@ function clearLast(display) {
 // shortTo - minimum length of the shortened number
 function shortenNum(num1, num2, charNumber, operatorLength, shortTo) {
     let max = charNumber - operatorLength - num2.toString().length;
+
     max = max > shortTo ? max : shortTo;
+
+    console.log(max);
     return roundNumber(num1, max);
 }
 
 // Create an output string of the correct length for the display, rounding numbers as necessary
-// terms - number of operation components involved: 0 for none, 1 for the first number or the result, 2 for the first number and the operator and 3 for the first number, the operator and the second number.
+// terms - number of operation components involved: n for none, f for the first number, o for the first number and the operator, s for the first number, the operator and the second number and everything else to be interpreted as a result.
 // charNumber - maximum length of the string to be created, default 15 characters
 // shortTo - minimum length of shortened numbers, default 6 characters
-function createOutputString(terms, charNumber = 15, shortTo = 6) {
+function createOutputString(terms, charNumber = 15, shortTo = 5) {
     let num1 = firstNum;
     let num2 = secondNum;
 
     switch (terms) {
-        case 0:
-            return 0; break;
-        case 1:
+        case 'n':
+            return '0'; break;
+        case 'f':
             return roundNumber(firstNum, charNumber).toString(); break;
-        case 2:
-            return roundNumber(firstNum, charNumber - operator.length) + operator; break;
-        case 3:
-            return shortenNum(firstNum, secondNum, charNumber, operator.length, shortTo) + operator + shortenNum(secondNum, firstNum, charNumber, operator.length, shortTo); break;
-        case 'default':
-            return terms;
+        case 'o':
+            return roundNumber(firstNum, charNumber - operator.length - 1) + ' ' + operator; break;
+        case 's':
+            return shortenNum(firstNum, secondNum, charNumber, operator.length + 2, shortTo) + ' ' + operator + ' ' + shortenNum(secondNum, firstNum, charNumber, operator.length + 2, shortTo); break;
+        default:
+            //return terms.toString();
+            return roundNumber(Number(terms), charNumber).toString(); // to be tested
     }
 }
 
 function setDisplay(terms, display, charNumber = 15) {
     let out = createOutputString(terms);
+    console.log(out);
+
     if ((out != undefined) && (out.length <= charNumber)) {
         display.textContent = out;
     }
@@ -230,6 +276,9 @@ function setDisplay(terms, display, charNumber = 15) {
 
 // Process an input character and output the result to the display
 function getDisplay(input, display) {
+    input = parseKey(input); // In the case of keyboard entry 
+    console.log(input);
+
     if (!(invalidInput(input))) {
         if (operators.includes(input)) {
             if (firstNumStart()) {
@@ -248,7 +297,7 @@ function getDisplay(input, display) {
                 operator = input;
                 secondNum = NaN;
             }
-            setDisplay(2, display);
+            setDisplay('o', display);
         }
 
         else if (input == '=') {
@@ -259,7 +308,7 @@ function getDisplay(input, display) {
 
         else if (input == 'AC') {
             clear();
-            setDisplay(0, display);
+            setDisplay('n', display);
         }
 
         else if (input == 'C') {
@@ -269,15 +318,15 @@ function getDisplay(input, display) {
         else if (input == '.') {
             if (firstNumStart()) {
                 firstNum = 0 + '.';
-                setDisplay(1, display);
+                setDisplay('f', display);
             }
             else if (expandsSecondNum()) {
                 secondNum = secondNum + '.';
-                setDisplay(3, display)
+                setDisplay('s', display)
             }
             else if (expandsFirstNum()) {
                 firstNum = firstNum + '.';
-                setDisplay(1, display);
+                setDisplay('f', display);
             }
         }
 
@@ -289,30 +338,30 @@ function getDisplay(input, display) {
             if (firstNumStart()) {
                 firstNum = sign * Number(input);
                 sign = 1;
-                setDisplay(1, display);
+                setDisplay('f', display);
             }
             else if (secondNumStart()) {
                 secondNum = sign * Number(input);
                 sign = 1;
-                setDisplay(3, display);
+                setDisplay('s', display);
             }
             else if (expandsFirstNum()) {
                 if (firstNum instanceof Number && firstNum == 0) {
                     firstNum = input;
                 }
                 else {
-                    firstNum = Number(firstNum.toString() + input);
+                    firstNum = shiftNumber(firstNum, input);
                 }
-                setDisplay(1, display);
+                setDisplay('f', display);
             }
             else if (expandsSecondNum()) {
-                secondNum = Number(secondNum.toString() + input);
-                setDisplay(3, display);
+                secondNum = shiftNumber(secondNum, input);
+                setDisplay('s', display);
             }
         }
     }
 
-    else {
+    else if (!(input == 'ignore')) {
         console.error("Invalid input: " + errorMessage);
         setDisplay(undefined, display);
     }
@@ -328,7 +377,9 @@ function clear() {
 
 function operate(num1, num2, operator) {
     if (operators.includes(operator) && !(isNaN(num1) || isNaN(num2))) {
-        switch (operator) {
+        let op = operator;
+        operator = 'none';
+        switch (op) {
             case '+':
                 return add(num1, num2);
             case '-':
@@ -350,19 +401,18 @@ function substract(num1, num2) { return num1 - num2; }
 function multiply(num1, num2) { return num1 * num2; }
 
 function divide(num1, num2) {
-    if (num2 == 0) {
-        console.error("Error: dividing by zero");
+    if ((num2 == 0) || (num2 == NaN) || (num2 == undefined)) {
+        console.error("Error: illegal denominator");
         return undefined;
     }
     else { return num1 / num2; }
 }
 
 function modulo(num1, num2) {
-    if (num2 == 0) {
-        console.error("Error: dividing by zero");
+    if ((num2 == 0) || (num2 == NaN) || (num2 == undefined)) {
+        console.error("Error: illegal denominator");
         return undefined;
     }
     else { return num1 % num2; }
 }
-// keyboard support
-//TD: debuggen 
+// TD: display-Groesse fixen
